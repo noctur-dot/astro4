@@ -426,7 +426,7 @@ if uploaded_file:
             mime="text/csv"
 
         )
-        else:
+    else:
 
     st.info("👈 왼쪽에서 CSV 또는 FITS 파일을 업로드하세요.")
 
