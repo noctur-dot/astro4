@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-from scipy.signal import find_peaks
+from scipy.signal import find_peaks, savgol_filter
 from astropy.io import fits
 
 # -----------------------------
@@ -104,29 +104,124 @@ if uploaded_file:
             }).head()
         )
 
-        # -----------------------------
-        # 그래프
-        # -----------------------------
+# -----------------------------
+# 데이터 전처리
+# -----------------------------
 
-        fig = go.Figure()
+# 노이즈 제거
+smooth = savgol_filter(intensity, 15, 3)
 
-        fig.add_trace(
-            go.Scatter(
-                x=wavelength,
-                y=intensity,
-                mode="lines",
-                name="Spectrum"
-            )
-        )
+# 최고 세기
+max_index = np.argmax(smooth)
+max_wave = wavelength[max_index]
+max_intensity = smooth[max_index]
 
-        fig.update_layout(
-            title="Spectrum",
-            xaxis_title="Wavelength",
-            yaxis_title="Intensity"
-        )
+# 흡수선 탐색
+inverse = np.max(smooth) - smooth
 
-        st.plotly_chart(fig, use_container_width=True)
+peaks, _ = find_peaks(
+    inverse,
+    prominence=np.max(inverse) * 0.05,
+    distance=20
+)
 
+# -----------------------------
+# 결과 출력
+# -----------------------------
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.metric(
+        "최고 세기 파장",
+        f"{max_wave:.2f} nm"
+    )
+
+with col2:
+    st.metric(
+        "검출된 흡수선",
+        len(peaks)
+    )
+
+# -----------------------------
+# 그래프
+# -----------------------------
+
+fig = go.Figure()
+
+fig.add_trace(
+    go.Scatter(
+        x=wavelength,
+        y=smooth,
+        mode="lines",
+        name="Spectrum"
+    )
+)
+
+# 최고점
+fig.add_trace(
+    go.Scatter(
+        x=[max_wave],
+        y=[max_intensity],
+        mode="markers",
+        marker=dict(size=10),
+        name="Maximum"
+    )
+)
+
+# 흡수선
+fig.add_trace(
+    go.Scatter(
+        x=wavelength[peaks],
+        y=smooth[peaks],
+        mode="markers",
+        marker=dict(size=8),
+        name="Absorption Lines"
+    )
+)
+
+# Hα
+fig.add_vline(
+    x=656.3,
+    line_dash="dash",
+    annotation_text="Hα"
+)
+
+# Hβ
+fig.add_vline(
+    x=486.1,
+    line_dash="dash",
+    annotation_text="Hβ"
+)
+
+fig.update_layout(
+    title="Spectrum Analysis",
+    xaxis_title="Wavelength (nm)",
+    yaxis_title="Intensity",
+    height=600
+)
+
+st.plotly_chart(
+    fig,
+    use_container_width=True
+)
+
+# -----------------------------
+# 흡수선 목록
+# -----------------------------
+
+st.subheader("검출된 흡수선")
+
+line_df = pd.DataFrame({
+    "번호": np.arange(1, len(peaks)+1),
+    "파장(nm)": wavelength[peaks],
+    "세기": smooth[peaks]
+})
+
+st.dataframe(
+    line_df,
+    use_container_width=True
+)
 else:
 
     st.info("왼쪽에서 CSV 또는 FITS 파일을 업로드하세요.")
