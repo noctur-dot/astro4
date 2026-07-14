@@ -1,4 +1,7 @@
-streamlit
-astropy
-numpy
-pillow
+streamlit>=1.37.0
+numpy>=1.26.0
+pandas>=2.2.2
+matplotlib>=3.9.0
+plotly>=5.22.0
+scipy>=1.14.0
+astropy>=6.1.0
