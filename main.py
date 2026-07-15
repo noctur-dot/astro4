@@ -3,7 +3,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-from scipy.signal import find_peaks
+from scipy.signal import find_peaks, savgol_filter
 from astropy.io import fits
 
 # -----------------------------
@@ -109,24 +109,97 @@ if uploaded_file:
         # 그래프
         # -----------------------------
 
+        # -----------------------------
+        # 데이터 분석
+        # -----------------------------
+        
+        smooth = savgol_filter(intensity, 15, 3)
+        
+        inverse = np.max(smooth) - smooth
+        
+        peaks, _ = find_peaks(
+            inverse,
+            prominence=np.max(inverse) * 0.05,
+            distance=20
+        )
+        
+        max_index = np.argmax(smooth)
+        
+        peak_wave = wavelength.iloc[max_index] if hasattr(wavelength, "iloc") else wavelength[max_index]
+        peak_flux = smooth[max_index]
+        
+        temperature = 2.897e6 / peak_wave
+        
+        if temperature >= 30000:
+            star = "O형"
+        elif temperature >= 10000:
+            star = "B형"
+        elif temperature >= 7500:
+            star = "A형"
+        elif temperature >= 6000:
+            star = "F형"
+        elif temperature >= 5200:
+            star = "G형"
+        elif temperature >= 3700:
+            star = "K형"
+        else:
+            star = "M형"
+        
+        col1, col2, col3 = st.columns(3)
+        
+        col1.metric("최고 파장", f"{peak_wave:.1f} nm")
+        col2.metric("표면온도", f"{temperature:.0f} K")
+        col3.metric("분광형", star)
+        
         fig = go.Figure()
-
+        
         fig.add_trace(
             go.Scatter(
                 x=wavelength,
-                y=intensity,
+                y=smooth,
                 mode="lines",
                 name="Spectrum"
             )
         )
-
-        fig.update_layout(
-            title="Spectrum",
-            xaxis_title="Wavelength",
-            yaxis_title="Intensity"
+        
+        fig.add_trace(
+            go.Scatter(
+                x=[peak_wave],
+                y=[peak_flux],
+                mode="markers",
+                name="Maximum"
+            )
         )
-
+        
+        fig.add_trace(
+            go.Scatter(
+                x=wavelength.iloc[peaks] if hasattr(wavelength, "iloc") else wavelength[peaks],
+                y=smooth[peaks],
+                mode="markers",
+                name="Absorption"
+            )
+        )
+        
+        fig.add_vline(x=656.3, line_dash="dash", annotation_text="Hα")
+        fig.add_vline(x=486.1, line_dash="dash", annotation_text="Hβ")
+        
+        fig.update_layout(
+            title="Spectrum Analysis",
+            xaxis_title="Wavelength (nm)",
+            yaxis_title="Intensity",
+            height=600
+        )
+        
         st.plotly_chart(fig, use_container_width=True)
+        
+        st.subheader("검출된 흡수선")
+        
+        line_df = pd.DataFrame({
+            "파장(nm)": wavelength.iloc[peaks] if hasattr(wavelength, "iloc") else wavelength[peaks],
+            "세기": smooth[peaks]
+        })
+        
+        st.dataframe(line_df, use_container_width=True)
 
 else:
 
